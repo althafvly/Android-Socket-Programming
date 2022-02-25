@@ -1,14 +1,16 @@
 package com.example.server_side;
 
+import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -21,19 +23,17 @@ import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class MainActivity extends AppCompatActivity  {
+
+public class MainActivity extends AppCompatActivity {
+    //the SERVER_PORT is initialized which must correspond to the port of the client
+    public static final int SERVER_PORT = 5050;
+    //here it sets the Thread initially to null
+    Thread serverThread = null;
     //initializes all the private properties
     //For any server the ServerSocket and the Socket corresponding to the temp client
     // to be activated must be initialized
     private ServerSocket serverSocket;
     private Socket tempClientSocket;
-
-    //here it sets the Thread initially to null
-    Thread serverThread = null;
-
-    //the SERVER_PORT is initialized which must correspond to the port of the client
-    public static final int SERVER_PORT = 5050;
-
     //the msgList is initialized corresponding to the Linearlayout
     private LinearLayout msgList;
     private Handler handler;
@@ -58,9 +58,9 @@ public class MainActivity extends AppCompatActivity  {
     }
 
 
-
     //method to implement the different Textviews widget and display the message on
     //the Scrollview LinearLayout...
+    @SuppressLint("SetTextI18n")
     public TextView textView(String message, int color, Boolean value) {
 
         //it checks if the message is empty then displays empty message
@@ -69,7 +69,7 @@ public class MainActivity extends AppCompatActivity  {
         }
         TextView tv = new TextView(this);
         tv.setTextColor(color);
-        tv.setText(message + " [" + getTime() +"]");
+        tv.setText(message + " [" + getTime() + "]");
         tv.setTextSize(20);
         tv.setPadding(0, 5, 0, 0);
         if (value) {
@@ -109,7 +109,6 @@ public class MainActivity extends AppCompatActivity  {
                 sendMessage(msg);
             }
             edMessage.setText("");
-            return;
         }
     }
 
@@ -118,23 +117,39 @@ public class MainActivity extends AppCompatActivity  {
     private void sendMessage(final String message) {
         try {
             if (null != tempClientSocket) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        PrintWriter out = null;
-                        try {
-                            out = new PrintWriter(new BufferedWriter(
-                                    new OutputStreamWriter(tempClientSocket.getOutputStream())),
-                                    true);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                        out.println(message);
+                new Thread(() -> {
+                    PrintWriter out = null;
+                    try {
+                        out = new PrintWriter(new BufferedWriter(
+                                new OutputStreamWriter(tempClientSocket.getOutputStream())),
+                                true);
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
+                    assert out != null;
+                    out.println(message);
                 }).start();
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    //getTime method implemented to format the date into H:m:s
+    @SuppressLint("SimpleDateFormat")
+    String getTime() {
+        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
+        return sdf.format(new Date());
+    }
+
+    //personally described onDestroy method to disconnect from the network on destroy of the activity
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (null != serverThread) {
+            sendMessage("Disconnect");
+            serverThread.interrupt();
+            serverThread = null;
         }
     }
 
@@ -145,10 +160,6 @@ public class MainActivity extends AppCompatActivity  {
             Socket socket;
             try {
                 serverSocket = new ServerSocket(SERVER_PORT);
-
-                //deactivates the visibility of the button
-//               Button button = (Button) findViewById(R.id.start_server);
-//               button.setVisibility(View.GONE);
             } catch (IOException e) {
                 e.printStackTrace();
                 showMessage("Error Starting Server : " + e.getMessage(), Color.RED, false);
@@ -173,15 +184,12 @@ public class MainActivity extends AppCompatActivity  {
     /* communicationThread class that implements the runnable class to communicate with the client */
     class CommunicationThread implements Runnable {
 
-        private Socket clientSocket;
-
         private BufferedReader input;
 
         public CommunicationThread(Socket clientSocket) {
-            this.clientSocket = clientSocket;
             tempClientSocket = clientSocket;
             try {
-                this.input = new BufferedReader(new InputStreamReader(this.clientSocket.getInputStream()));
+                this.input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             } catch (IOException e) {
                 e.printStackTrace();
                 showMessage("Error Connecting to Client!!", Color.RED, false);
@@ -193,7 +201,6 @@ public class MainActivity extends AppCompatActivity  {
 
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-
                     //checks to see if the client is still connected and displays disconnected if disconnected
                     String read = input.readLine();
                     if (null == read || "Disconnect".contentEquals(read)) {
@@ -210,23 +217,5 @@ public class MainActivity extends AppCompatActivity  {
             }
         }
 
-    }
-
-
-    //getTime method implemented to format the date into H:m:s
-    String getTime() {
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
-        return sdf.format(new Date());
-    }
-
-    //personally described onDestroy method to disconnect from the network on destroy of the activity
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (null != serverThread) {
-            sendMessage("Disconnect");
-            serverThread.interrupt();
-            serverThread = null;
-        }
     }
 }
